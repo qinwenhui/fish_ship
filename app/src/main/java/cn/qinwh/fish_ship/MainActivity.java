@@ -32,6 +32,9 @@ public class MainActivity extends AppCompatActivity {
     private TextView connectText, onText, ledText, leftSpeedText, rightSpeedText, seekbarText;
     private SeekBar seekBar;
     private Ship ship;
+    private boolean isForward;
+    private boolean isLeft;
+    private boolean isRight;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -43,6 +46,13 @@ public class MainActivity extends AppCompatActivity {
 
         initView();
         initListener();
+
+        //  船的初始速度和进度条保持一致
+        ship.setLeftSpeed(seekBar.getProgress());
+        ship.setRightSpeed(seekBar.getProgress());
+        ship.setMaxSpeed(seekBar.getProgress());
+        // 让船先进行一次心跳检测，解决重新进入程序时实际处于连接状态，但是页面ui没变化的问题
+        ship.heart();
     }
 
     /**
@@ -197,6 +207,7 @@ public class MainActivity extends AppCompatActivity {
                 int speed = seekBar.getProgress();
                 ship.setLeftSpeed(speed*10);
                 ship.setRightSpeed(speed*10);
+                ship.setMaxSpeed(speed*10);
             }
         });
 
@@ -206,18 +217,29 @@ public class MainActivity extends AppCompatActivity {
             public boolean onTouch(View v, MotionEvent event) {
                 if (!ship.isOn()) {
                     // 船没启动，无法操作
-                    Toast.makeText(MainActivity.this, "请先连接并启动设备！", Toast.LENGTH_SHORT).show();
-                    return false;
+//                    Toast.makeText(MainActivity.this, "请先连接并启动设备！", Toast.LENGTH_SHORT).show();
+                    return true;
                 }
+
                 if (event.getAction() == 0) {
+                    // 设置按钮背景
+                    forwardBtn.setBackgroundResource(R.drawable.btn_2);
                     // 按下了，船前进，速度是之前设置好的速度
-                    ship.setShipSpeed(ship.getLeftSpeed(), ship.getRightSpeed());
+                    isForward = true;
+                    // 判断如果按下前进之前有转向，那就不处理
+                    if(!isLeft && !isRight) {
+                        ship.setShipSpeed(ship.getMaxSpeed(), ship.getMaxSpeed());
+                    }
+
                 }
                 if (event.getAction() == 1) {
+                    // 设置按钮背景
+                    forwardBtn.setBackgroundResource(R.drawable.btn_1);
                     // 抬起了，船停止,设置速度为0
                     ship.setShipSpeed(0, 0);
+                    isForward = false;
                 }
-                return false;
+                return true;
             }
         });
 
@@ -227,18 +249,28 @@ public class MainActivity extends AppCompatActivity {
             public boolean onTouch(View v, MotionEvent event) {
                 if (!ship.isOn()) {
                     // 船没启动，无法操作
-                    Toast.makeText(MainActivity.this, "请先连接并启动设备！", Toast.LENGTH_SHORT).show();
-                    return false;
+//                    Toast.makeText(MainActivity.this, "请先连接并启动设备！", Toast.LENGTH_SHORT).show();
+                    return true;
                 }
                 if (event.getAction() == 0) {
+                    // 设置按钮背景
+                    leftBtn.setBackgroundResource(R.drawable.btn_2);
                     // 按下了，船左转，速度是之前设置好的速度
-                    ship.setShipSpeed(ship.getLeftSpeed()/2, ship.getRightSpeed());
+                    isLeft = true;
+                    ship.setShipSpeed(ship.getMaxSpeed()/2, ship.getMaxSpeed());
                 }
                 if (event.getAction() == 1) {
+                    // 设置按钮背景
+                    leftBtn.setBackgroundResource(R.drawable.btn_1);
                     // 抬起了，船恢复速度前进
-                    ship.setShipSpeed(ship.getLeftSpeed(), ship.getRightSpeed());
+                    isLeft = false;
+                    if (isForward)
+                        ship.setShipSpeed(ship.getMaxSpeed(), ship.getMaxSpeed());
+                    else {
+                        ship.setShipSpeed(0, 0);
+                    }
                 }
-                return false;
+                return true;
             }
         });
 
@@ -248,20 +280,37 @@ public class MainActivity extends AppCompatActivity {
             public boolean onTouch(View v, MotionEvent event) {
                 if (!ship.isOn()) {
                     // 船没启动，无法操作
-                    Toast.makeText(MainActivity.this, "请先连接并启动设备！", Toast.LENGTH_SHORT).show();
-                    return false;
+//                    Toast.makeText(MainActivity.this, "请先连接并启动设备！", Toast.LENGTH_SHORT).show();
+                    return true;
                 }
                 if (event.getAction() == 0) {
+                    // 设置按钮背景
+                    rightBtn.setBackgroundResource(R.drawable.btn_2);
                     // 按下了，船右转，速度是之前设置好的速度
-                    ship.setShipSpeed(ship.getLeftSpeed(), ship.getRightSpeed()/2);
+                    isRight = true;
+                    ship.setShipSpeed(ship.getMaxSpeed(), ship.getMaxSpeed()/2);
                 }
                 if (event.getAction() == 1) {
+                    // 设置按钮背景
+                    rightBtn.setBackgroundResource(R.drawable.btn_1);
                     // 抬起了，船恢复速度前进
-                    ship.setShipSpeed(ship.getLeftSpeed(), ship.getRightSpeed());
+                    isRight = false;
+                    if (isForward)
+                        ship.setShipSpeed(ship.getMaxSpeed(), ship.getMaxSpeed());
+                    else {
+                        ship.setShipSpeed(0, 0);
+                    }
                 }
-                return false;
+                return true;
             }
         });
+    }
+
+    @Override
+    protected void onDestroy() {
+        // 销毁udp
+        ship.destroy();
+        super.onDestroy();
     }
 
     private Handler shipHandler = new Handler(Looper.getMainLooper()) {
@@ -282,6 +331,7 @@ public class MainActivity extends AppCompatActivity {
                     // 启动
 //                    onSwitch.setChecked(true);
                     onText.setText("已启动");
+                    ledText.setText("常亮");
                     break;
                 case Ship.SHIP_STOP:
                     // 停止
@@ -307,6 +357,18 @@ public class MainActivity extends AppCompatActivity {
                 case Ship.SHIP_FLASH:
                     // 设置闪烁
                     ledText.setText("闪烁");
+                    break;
+                case Ship.SHIP_HEART:
+                    // 心跳检测
+                    int active = (int) msg.obj;
+                    if (active == 1) {
+                        connectBtn.setText("断开设备");
+                        connectText.setText("已连接");
+                    }else {
+                        Log.i("HEART", "连接已断开");
+                        connectBtn.setText("连接设备");
+                        connectText.setText("未连接");
+                    }
                     break;
             }
         }

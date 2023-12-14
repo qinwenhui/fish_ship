@@ -13,7 +13,7 @@ import java.util.Arrays;
 
 public class UdpSocket {
     private DatagramSocket socket;
-    public static final int UDPPORT = 8888;
+    public static final int UDPPORT = 8088;
     private Handler handler;
     private boolean getMessage;
 
@@ -89,6 +89,10 @@ public class UdpSocket {
                 }
             }
         });
+    }
+
+    public void close() {
+        socket.close();
     }
 
     public static String bytesToHexString(byte[] bytes) {

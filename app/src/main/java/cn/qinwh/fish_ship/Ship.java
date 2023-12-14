@@ -8,6 +8,7 @@ import android.util.Log;
 import java.util.ArrayList;
 import java.util.List;
 
+import cn.qinwh.fish_ship.utils.ThreadPoolUtil;
 import cn.qinwh.fish_ship.utils.UdpSocket;
 
 public class Ship {
@@ -16,6 +17,7 @@ public class Ship {
     private int led;    // 0=关闭,1=常亮,2=闪烁
     private int leftSpeed;
     private int rightSpeed;
+    private int maxSpeed;
     private UdpSocket udpSocket;
     private String ip;
     private int port;
@@ -27,6 +29,7 @@ public class Ship {
     public static final int SHIP_SPEED = 0x05;
     public static final int SHIP_LED = 0x06;
     public static final int SHIP_FLASH = 0x07;
+    public static final int SHIP_HEART = 0x08;
 
     public static final int UDP_RECV = 0x00;
     private Handler udpHandler = new Handler(Looper.getMainLooper()) {
@@ -86,6 +89,18 @@ public class Ship {
                         message.what = SHIP_FLASH;
                         message.obj = 2;
                     }
+                    if ("HEART".equals(commond)) {
+                        // 心跳
+                        int active = Integer.valueOf(commonds[1]);
+                        if (active == 1) {
+                            // 心跳正常，连接正常
+                            setConnect(true);
+                        }else {
+                            setConnect(false);
+                        }
+                        message.what = SHIP_HEART;
+                        message.obj = active;
+                    }
                     shipHandler.sendMessage(message);
                     break;
             }
@@ -103,6 +118,32 @@ public class Ship {
             Log.e("Ship", "Ship初始化UDP失败");
             e.printStackTrace();
         }
+        // 异步发送心跳
+        ThreadPoolUtil.execute(new Runnable() {
+            @Override
+            public void run() {
+                // 判断是否处于连接状态，连接状态才进行心跳检测
+                while (true) {
+                    if (isConnect()) {
+                        heart();
+                    }
+                    // 延时1秒
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        });
+    }
+
+    /**
+     * 销毁udp，防止重进程序时提示端口占用
+     */
+    public void destroy() {
+        setConnect(false);
+        udpSocket.close();
     }
 
     public void sendCommond(String commond) {
@@ -165,7 +206,7 @@ public class Ship {
     public boolean flashLed() {
         // 发送闪烁灯请求
         Log.i("Ship", "发送闪烁灯请求");
-        sendCommond("flash+200");
+        sendCommond("flash+500");
         return true;
     }
 
@@ -186,7 +227,12 @@ public class Ship {
     public void setShipSpeed(int left, int right) {
         // 设置速度
         Log.i("Ship", "发送设置速度请求");
-        sendCommond("speed+"+","+left+","+right);
+        sendCommond("speed+"+left+","+right);
+    }
+
+    public void heart() {
+        // 发送心跳包
+        sendCommond("HEART");
     }
 
     public int getLeftSpeed() {
@@ -203,5 +249,13 @@ public class Ship {
 
     public void setRightSpeed(int rightSpeed) {
         this.rightSpeed = rightSpeed;
+    }
+
+    public int getMaxSpeed() {
+        return maxSpeed;
+    }
+
+    public void setMaxSpeed(int maxSpeed) {
+        this.maxSpeed = maxSpeed;
     }
 }
